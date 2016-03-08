@@ -1,0 +1,143 @@
+/*  CustomSettingsExporter
+    Copyright (C) 2016 4an70m
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+public class CustomSettingsExporter {
+    
+    private Set<String> customSettingsToExport;
+    private final String DELIMITER = ',';
+    public final Set<String> fieldsToAvoid = new Set<String>{
+        'ID', 'ISDELETED', 'SETUPOWNERID', 'CREATEDDATE', 'CREATEDBYID', 'LASTMODIFIEDDATE', 'LASTMODIFIEDBYID', 'SYSTEMMODSTAMP'
+    };
+    
+    public CustomSettingsExporter(){
+        customSettingsToExport = new Set<String>();
+    }
+    
+    public void addCS(String cs){
+        customSettingsToExport.addAll(cs.split(DELIMITER));
+    }
+    
+    public void addCS(SObject obj){
+        String objectName = String.valueOf(obj.getSObjectType());
+        customSettingsToExport.add(objectName);
+    }
+    
+    public void clearCS(){
+        customSettingsToExport = new Set<String>();
+    }
+    
+    public void exportCS(String email){
+        exportCS(email, true);
+    }
+    
+    public void exportCSviaId(){
+		exportCS(UserInfo.getUserId());
+    }
+    
+    public void exportCS(Id uid){
+        exportCS(uid);
+    }
+    
+    private void exportCS(String address, Boolean isEmail){
+        Messaging.reserveSingleEmailCapacity(1);
+        Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
+        if(isEmail){
+            String[] toAddresses = new String[] {address}; 
+            mail.setToAddresses(toAddresses);
+        } else {
+            mail.setTargetObjectId(address);
+        	mail.setSaveAsActivity(false);
+        }
+        mail.setSenderDisplayName('Custom Settings Exporter');
+        mail.setSubject('Custom settings of ' + Organization.Name + ' for ' + DateTime.now());
+        String messageBody = getCustomSettings();
+        if(messageBody == '') return;
+        mail.setHtmlBody(messageBody);
+        Messaging.sendEmail(new Messaging.SingleEmailMessage[] { mail });
+    }
+    
+    private String getCustomSettings(){
+        String customSettings = '';
+        System.debug(customSettingsToExport);
+        for(String csName : customSettingsToExport){
+            customSettings += processCustomSetting(csName);
+        }
+        return customSettings;
+    }
+    
+    private String processCustomSetting(String csName){
+        Map<String, Schema.SObjectField> fields = getFields(csName);
+        String query = 'SELECT ' + String.join(new List<String>(fields.keySet()), ',') + ' FROM ' + csName;
+        List<SObject> listCS = Database.query(query);
+        return processSettingsList(csName, fields, listCS);
+    }
+    
+    private String processSettingsList(String csName, Map<String, Schema.SObjectField> fields, List<SObject> listCS){
+        List<String> csObjs = new List<String>();
+        String listName = 'list' + csName.removeEnd('__c') + System.now().millisecond();
+        String result = 'List<SObject> ' + listName;
+        result += ' = new List<SObject>();<br/>';
+        for(SObject obj : listCS){
+            result += getStringRepOfObj(listName, csName, obj, fields);
+        }
+        result += 'insert ' + listName + ';<br/><br/>';
+        return result;
+    }
+    
+    private String getStringRepOfObj(String listName, String csName, SObject obj, Map<String, Schema.SObjectField> fields){
+        String result = listName + '.add(new ' + csName + '(';
+        List<String> values = new List<String>();
+        for(Schema.SObjectField field : fields.values()){
+            Schema.DisplayType type = field.getDescribe().getType();
+            if(isStringField(type)){
+                values.add(putString(obj, field));
+            } else {
+                values.add(putValue(obj, field));
+            }
+                
+        }
+        result += String.join(values, ',');
+        result += '));<br/>';
+        return result;
+    }
+    
+    private Map<String, Schema.SObjectField> getFields(String csName){
+        Map <String, Schema.SObjectField> fieldMap = Schema.getGlobalDescribe().get(csName).getDescribe().fields.getMap();
+        Map<String, Schema.SObjectField> customFields = new Map<String, Schema.SObjectField>();
+        for(String fieldName : fieldMap.keySet()){
+            if(!fieldsToAvoid.contains(fieldName.toUpperCase())){
+                customFields.put(fieldName, fieldMap.get(fieldName));
+            }
+        }
+        return customFields;
+    }
+
+    private Boolean isStringField(Schema.DisplayType type){
+        return 
+            type == Schema.DisplayType.EMAIL || 
+            type == Schema.DisplayType.STRING ||
+            type == Schema.DisplayType.TEXTAREA ||
+            type == Schema.DisplayType.URL;
+    }
+    
+    private String putString(SObject obj, Schema.SObjectField field){
+        return field + '=\'' + obj.get(field) + '\'';
+    }
+    
+    private String putValue(SObject obj, Schema.SObjectField field){
+        return field + '=' + obj.get(field);
+    }
+}
