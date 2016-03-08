@@ -44,7 +44,7 @@ public class CustomSettingsExporter {
     }
     
     public void exportCSviaId(){
-		exportCS(UserInfo.getUserId());
+	exportCS(UserInfo.getUserId());
     }
     
     public void exportCS(Id uid){
