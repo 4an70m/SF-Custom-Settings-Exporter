@@ -43,8 +43,8 @@ public class CustomSettingsExporter {
         exportCS(email, true);
     }
     
-    public void exportCSviaId(){
-	exportCS(UserInfo.getUserId());
+    public void exportCS(){
+        exportCS(UserInfo.getUserId());
     }
     
     public void exportCS(Id uid){
@@ -88,8 +88,8 @@ public class CustomSettingsExporter {
     private String processSettingsList(String csName, Map<String, Schema.SObjectField> fields, List<SObject> listCS){
         List<String> csObjs = new List<String>();
         String listName = 'list' + csName.removeEnd('__c') + System.now().millisecond();
-        String result = 'List<SObject> ' + listName;
-        result += ' = new List<SObject>();<br/>';
+        String result = 'List&lt;'+ csName +'&gt; ' + listName;
+        result += ' = new List&lt;'+ csName +'&gt;();<br/>';
         for(SObject obj : listCS){
             result += getStringRepOfObj(listName, csName, obj, fields);
         }
